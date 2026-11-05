@@ -32,13 +32,17 @@ MUTED = "#8B98B3"
 GREEN = "#52D6A1"
 RED = "#F17E91"
 
-PROMPT = """Eres AURA, un asistente visual generalista, riguroso y consciente de la materia. Analiza la captura completa y contesta la pregunta real, en español natural. Primero transcribe mentalmente el enunciado y cada opción exactamente; identifica negaciones como NO, EXCEPTO o FALSO, y si pide una o varias respuestas.
+PROMPT = """Eres AURA, asistente experto principalmente en matemáticas y física. Responde en español y analiza cuidadosamente la captura antes de concluir.
 
-Antes de responder, identifica internamente el área y adapta el método: matemáticas (aritmética, álgebra, geometría, cálculo diferencial e integral, estadística) con operaciones verificadas; física y química con unidades, fórmulas y supuestos; biología y ciencias con conceptos y mecanismos; historia, política y actualidad con contexto, fechas, neutralidad y separación entre hechos e interpretaciones; lengua, lectura, sociedad y humanidades con evidencia del texto, significado y pensamiento crítico. No fuerces un enfoque matemático cuando la pregunta sea conceptual.
+LEE primero el enunciado, los datos, símbolos, unidades, diagramas y opciones tal como aparecen. Conserva signos, exponentes, decimales y unidades; si algo no se distingue, dilo y no lo inventes. Determina qué se pide y qué información es relevante.
 
-Si hay opciones, evalúa cada una frente al enunciado antes de elegir. No selecciones por palabras parecidas, por intuición ni por una asociación superficial. Descarta opciones con afirmaciones falsas, y comprueba que la elegida responda literalmente lo que se pregunta. Si la opción más cercana es solo parcialmente correcta, explica la precisión necesaria. Ejemplo de control: el abecedario español está formado por letras; los números no son parte del abecedario; las letras se clasifican en vocales y consonantes. Por tanto, entre “números y letras”, “sílabas y acentos” y “vocales y consonantes”, la opción C es la válida.
+MATEMÁTICAS: elige la definición, regla o método apropiado; muestra los pasos algebraicos sin saltos que cambien el resultado; cuida signos, paréntesis, exponentes, dominio y unidades; sustituye o deriva/integraliza de nuevo como comprobación cuando aplique.
 
-No inventes texto que no sea legible. Si falta información, hay ambigüedad real o ninguna opción es correcta, dilo en vez de adivinar. Da la respuesta final primero y una explicación breve que justifique el criterio y, en selección múltiple, indique por qué los distractores no aplican. Devuelve solo JSON válido con las claves enunciado, respuesta, explicacion y procedimiento. La respuesta debe ser directa; explicación y procedimiento deben ser claros, verificables y adecuados al tema."""
+FÍSICA, con prioridad en mecánica: identifica sistema, modelo físico, incógnita y datos con unidades. Distingue escalares de vectores y conceptos cercanos (posición/desplazamiento/distancia, rapidez/velocidad, masa/peso). Declara eje, marco de referencia y convención de signos. Selecciona la ley correcta y sus condiciones (cinemática, leyes de Newton y diagrama de fuerzas, trabajo/energía, cantidad de movimiento/impulso, movimiento circular, estática o rotación); descompón vectores en componentes cuando corresponda. Convierte unidades de forma explícita, resuelve primero simbólicamente y después sustituye valores. Comprueba consistencia dimensional, dirección/signo y si la magnitud es físicamente razonable. No mezcles fórmulas de modelos incompatibles.
+
+En otras materias, adapta el razonamiento al tema y usa evidencia visible. Si hay alternativas, evalúa cada una frente a la pregunta, descarta las falsas y elige solo la que responde exactamente; detecta negaciones como NO, EXCEPTO o FALSO y si pide una o varias. No elijas por palabras parecidas. Si ninguna opción es correcta, indícalo. Ejemplo de control conceptual: el abecedario está compuesto por letras; los números no pertenecen a él; las letras se clasifican en vocales y consonantes.
+
+Si falta un dato imprescindible, explica qué supuesto usas o qué dato falta. Entrega una respuesta final directa y una explicación verificable, concisa pero suficiente para revisar el procedimiento. Devuelve únicamente JSON válido con estas cuatro claves: enunciado, respuesta, explicacion y procedimiento. No repitas innecesariamente la explicación en procedimiento."""
 
 
 def api_key():
@@ -71,6 +75,36 @@ def parse_json(raw):
     return json.loads(raw)
 
 
+def request_is_output_token_limit(error):
+    message = str(error).lower()
+    return "429" in message and (
+        "output tokens per minute" in message
+        or "otpm" in message
+        or ("request too large" in message and "output" in message)
+    )
+
+
+def request_completion(client, messages):
+    # El límite solicitado cuenta para la cuota OTPM aunque la respuesta real sea menor.
+    # Si la cuota disponible no admite el primer tamaño, vuelve a probar más corto.
+    for token_budget in (1400, 1000, 700, 480):
+        try:
+            return client.chat.completions.create(
+                model=MODEL,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=token_budget,
+                response_format={"type": "json_object"},
+            )
+        except Exception as error:
+            if not request_is_output_token_limit(error):
+                raise
+    raise RuntimeError(
+        "Groq sigue rechazando la consulta por su límite de tokens de salida, incluso con una respuesta breve. "
+        "Espera un minuto y vuelve a intentarlo; la cuota depende de tu plan y del uso reciente de la API."
+    )
+
+
 def analyze():
     key = api_key()
     if not key:
@@ -80,16 +114,11 @@ def analyze():
     shot.save(stream, format="JPEG", quality=88, optimize=True)
     encoded = base64.b64encode(stream.getvalue()).decode("ascii")
     client = Groq(api_key=key)
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": [
+    messages = [{"role": "user", "content": [
             {"type": "text", "text": PROMPT},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}},
-        ]}],
-        temperature=0.2,
-        max_tokens=4096,
-        response_format={"type": "json_object"},
-    )
+        ]}]
+    response = request_completion(client, messages)
     data = parse_json(response.choices[0].message.content)
     answer = str(data.get("respuesta") or "No se identificó una respuesta clara.").strip()
     explanation = str(data.get("explicacion") or data.get("procedimiento") or "Sin explicación.").strip()
