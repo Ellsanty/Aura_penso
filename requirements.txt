@@ -1,0 +1,7 @@
+groq>=0.11.0
+Pillow>=10.0.0
+pyinstaller>=6.0.0
+customtkinter>=5.2.2
+keyboard>=0.13.5
+winotify>=1.1.0
+pystray>=0.19.5

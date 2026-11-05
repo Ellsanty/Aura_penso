@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Aplicación empaquetada y archivos temporales de compilación
+build/
+dist/*
+*.spec
+*.exe
+*.pkg
+*.ico
+!dist/AURA.exe
+
+# Configuración y datos privados/locales
+.env
+.env.*
+!.env.example
+*.key
+historial*.txt
+
+# Paquete local de código fuente
+AURA_codigo_fuente.zip
+
+# Archivo ajeno al código de AURA que estaba en la carpeta
+cartografia_penso.html
