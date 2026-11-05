@@ -2,11 +2,17 @@
 
 Aplicación de escritorio para Windows con interfaz renovada, logo propio, interruptor para activar/desactivar el atajo global `Ctrl + Q`, notificaciones de respuesta y visualización del análisis dentro de la aplicación. El análisis usa instrucciones especializadas para matemáticas, física, química, ciencias, humanidades, política y otras áreas.
 
+## Usar AURA en Windows
+
+Descarga y descomprime `AURA_para_Windows.zip` y abre `AURA.exe`. No necesitas instalar Python: el ejecutable incluye el entorno necesario para iniciar AURA. Solo necesitas conexión a Internet y tu propia clave API de Groq.
+
 ## Crear el ejecutable
 
-1. Instala Python 3.10 o posterior.
+Estos pasos son solo para quien quiera compilar AURA desde el código fuente; no son necesarios para usar `AURA.exe`.
+
+1. Instala Python 3.10 o posterior en el equipo de desarrollo.
 2. Haz doble clic en `crear_exe.bat` y espera a que termine la compilación.
-3. El ejecutable queda en `dist\AURA.exe`.
+3. El ejecutable independiente queda en `dist\AURA.exe`. Puedes distribuirlo sin pedir a los usuarios que instalen Python.
 4. Abre AURA, entra en **Ajustes**, agrega tu clave API de Groq y pulsa **Guardar clave**.
 5. Regresa a **Inicio**, activa el interruptor y pulsa `Ctrl + Q` desde la ventana que quieras analizar.
 6. Al cerrar la ventana con la X, AURA queda activa en el área de notificaciones, sin ocupar un botón en la barra de tareas. Desde el icono puedes volver a abrirla, activar/desactivar el atajo o elegir **Salir de AURA**. También puedes terminar el proceso desde el Administrador de tareas.
@@ -14,6 +20,8 @@ Aplicación de escritorio para Windows con interfaz renovada, logo propio, inter
 La captura completa se envía a Groq para producir el análisis. AURA no se oculta ni reaparece al usar el atajo. La respuesta se presenta en la aplicación y en una notificación de Windows; si la ventana está en el área de notificaciones, la respuesta queda disponible al volver a abrirla. El historial se guarda en `%APPDATA%\AuraAsistente\historial.txt` y la clave se almacena en el perfil de Windows del usuario.
 
 ## Desarrollo
+
+También requiere Python en el equipo de desarrollo:
 
 ```powershell
 python -m pip install -r requirements.txt
