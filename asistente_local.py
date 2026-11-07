@@ -32,17 +32,29 @@ MUTED = "#8B98B3"
 GREEN = "#52D6A1"
 RED = "#F17E91"
 
-PROMPT = """Eres AURA, asistente experto principalmente en matemáticas y física. Responde en español y analiza cuidadosamente la captura antes de concluir.
+PROMPT = """Eres AURA, un asistente experto en todas las áreas del conocimiento: matemáticas, cálculo, física, química, biología, lengua y lingüística, literatura, historia, geografía, ciencias sociales, política, economía, cultura, programación y más. Analiza la captura de pantalla y responde lo que en ella se pide.
 
-LEE primero el enunciado, los datos, símbolos, unidades, diagramas y opciones tal como aparecen. Conserva signos, exponentes, decimales y unidades; si algo no se distingue, dilo y no lo inventes. Determina qué se pide y qué información es relevante.
+1. LEE primero. Identifica el enunciado o la pregunta principal, los datos, símbolos, unidades, tablas, diagramas y opciones tal como aparecen. Conserva signos, exponentes, decimales y unidades. Si algo no se distingue, dilo; no lo inventes. Si hay varias preguntas, responde la más visible o completa e indica cuáles quedan sin responder.
 
-MATEMÁTICAS: elige la definición, regla o método apropiado; muestra los pasos algebraicos sin saltos que cambien el resultado; cuida signos, paréntesis, exponentes, dominio y unidades; sustituye o deriva/integraliza de nuevo como comprobación cuando aplique.
+2. IDIOMA. Responde en el idioma de la pregunta (por defecto, español).
 
-FÍSICA, con prioridad en mecánica: identifica sistema, modelo físico, incógnita y datos con unidades. Distingue escalares de vectores y conceptos cercanos (posición/desplazamiento/distancia, rapidez/velocidad, masa/peso). Declara eje, marco de referencia y convención de signos. Selecciona la ley correcta y sus condiciones (cinemática, leyes de Newton y diagrama de fuerzas, trabajo/energía, cantidad de movimiento/impulso, movimiento circular, estática o rotación); descompón vectores en componentes cuando corresponda. Convierte unidades de forma explícita, resuelve primero simbólicamente y después sustituye valores. Comprueba consistencia dimensional, dirección/signo y si la magnitud es físicamente razonable. No mezcles fórmulas de modelos incompatibles.
+3. MÉTODO según el tipo de pregunta:
+- Matemáticas y cálculo: elige la definición, regla o método apropiado; muestra los pasos sin saltos que cambien el resultado; cuida signos, paréntesis, exponentes, dominio y unidades; comprueba el resultado (sustituyendo, derivando o integrando de nuevo) cuando aplique.
+- Física: identifica sistema, modelo, incógnita y datos con unidades; declara eje y convención de signos; distingue escalares de vectores; elige la ley correcta y sus condiciones; resuelve primero en símbolos y luego sustituye; comprueba unidades, signo y si la magnitud es razonable.
+- Química, biología y otras ciencias: usa definiciones y leyes correctas, balancea ecuaciones, cuida unidades y órdenes de magnitud.
+- Lengua, lingüística y literatura: aplica la norma y la terminología correctas (gramática, ortografía, figuras retóricas, tipos de texto) y justifica con el propio texto de la captura.
+- Historia, geografía, política, economía, cultura y ciencias sociales: usa hechos verificables, con fechas, nombres y conceptos precisos. En temas debatidos o políticos, presenta las posturas principales con neutralidad, salvo que la pregunta pida un dato concreto. Si el dato puede haber cambiado recientemente o no estás seguro, indícalo.
+- Programación: razona sobre el código visible, detecta el error o la salida exacta y explica brevemente por qué.
+- Preguntas con opciones: evalúa cada opción frente a la pregunta, descarta las falsas y elige solo la que responde exactamente. Detecta negaciones como NO, EXCEPTO o FALSO y si se pide una o varias respuestas. No elijas por palabras parecidas. Si ninguna es correcta, indícalo.
 
-En otras materias, adapta el razonamiento al tema y usa evidencia visible. Si hay alternativas, evalúa cada una frente a la pregunta, descarta las falsas y elige solo la que responde exactamente; detecta negaciones como NO, EXCEPTO o FALSO y si pide una o varias. No elijas por palabras parecidas. Si ninguna opción es correcta, indícalo. Ejemplo de control conceptual: el abecedario está compuesto por letras; los números no pertenecen a él; las letras se clasifican en vocales y consonantes.
+4. HONESTIDAD. Si falta un dato imprescindible, explica el supuesto que usas o qué dato falta. Nunca inventes cifras, citas ni fuentes.
 
-Si falta un dato imprescindible, explica qué supuesto usas o qué dato falta. Entrega una respuesta final directa y una explicación verificable, concisa pero suficiente para revisar el procedimiento. Devuelve únicamente JSON válido con estas cuatro claves: enunciado, respuesta, explicacion y procedimiento. No repitas innecesariamente la explicación en procedimiento."""
+5. SALIDA. Devuelve únicamente JSON válido con estas cinco claves:
+- enunciado: la pregunta tal como la entendiste, resumida.
+- respuesta: la respuesta final, directa y breve.
+- explicacion: razonamiento verificable, conciso pero suficiente para revisarlo.
+- procedimiento: pasos de cálculo solo si aplican; si no, una cadena vacía. No repitas la explicación.
+- confianza: "alta", "media" o "baja". Usa "baja" si el texto es ilegible, falta un dato o el tema es dudoso o muy reciente."""
 
 
 def api_key():
@@ -87,7 +99,7 @@ def request_is_output_token_limit(error):
 def request_completion(client, messages):
     # El límite solicitado cuenta para la cuota OTPM aunque la respuesta real sea menor.
     # Si la cuota disponible no admite el primer tamaño, vuelve a probar más corto.
-    for token_budget in (1400, 1000, 700, 480):
+    for token_budget in (2200, 1500, 1000, 700):
         try:
             return client.chat.completions.create(
                 model=MODEL,
@@ -105,14 +117,28 @@ def request_completion(client, messages):
     )
 
 
+def encode_screenshot(shot, max_side=1920, limit=3_000_000):
+    # Groq rechaza imágenes base64 de más de 4 MB (error 413): se reduce el tamaño si hace falta.
+    width, height = shot.size
+    scale = max_side / max(width, height)
+    if scale < 1:
+        shot = shot.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
+    encoded = ""
+    for quality in (88, 80, 70, 60):
+        stream = io.BytesIO()
+        shot.save(stream, format="JPEG", quality=quality, optimize=True)
+        encoded = base64.b64encode(stream.getvalue()).decode("ascii")
+        if len(encoded) <= limit:
+            break
+    return encoded
+
+
 def analyze():
     key = api_key()
     if not key:
         raise RuntimeError("Agrega tu clave de Groq en Ajustes para empezar.")
     shot = ImageGrab.grab().convert("RGB")
-    stream = io.BytesIO()
-    shot.save(stream, format="JPEG", quality=88, optimize=True)
-    encoded = base64.b64encode(stream.getvalue()).decode("ascii")
+    encoded = encode_screenshot(shot)
     client = Groq(api_key=key)
     messages = [{"role": "user", "content": [
             {"type": "text", "text": PROMPT},
@@ -121,7 +147,16 @@ def analyze():
     response = request_completion(client, messages)
     data = parse_json(response.choices[0].message.content)
     answer = str(data.get("respuesta") or "No se identificó una respuesta clara.").strip()
-    explanation = str(data.get("explicacion") or data.get("procedimiento") or "Sin explicación.").strip()
+    explanation = str(data.get("explicacion") or "").strip()
+    procedure = str(data.get("procedimiento") or "").strip()
+    if procedure and procedure != explanation:
+        explanation = f"{explanation}\n\nProcedimiento:\n{procedure}".strip()
+    explanation = explanation or "Sin explicación."
+    confidence = str(data.get("confianza") or "").strip().lower()
+    if confidence in ("alta", "media", "baja"):
+        explanation += f"\n\nConfianza: {confidence}"
+        if confidence == "baja":
+            explanation += " (verifica esta respuesta por otra vía)"
     question = str(data.get("enunciado") or "No identificado").strip()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with HISTORY_FILE.open("a", encoding="utf-8") as f:
